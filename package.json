@@ -2,12 +2,22 @@
   "name": "scrape-zone",
   "version": "0.0.0",
   "private": true,
+  "description": "Web scraping test bed: inspect JSON scripts, Next.js RSC props, network requests and HTML from any page.",
+  "homepage": "https://github.com/andrewkucz/scrape-zone#readme",
+  "bugs": {
+    "url": "https://github.com/andrewkucz/scrape-zone/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrewkucz/scrape-zone.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vp dev",
     "build": "tsc && vp build",
     "start": "NODE_ENV=production node --env-file-if-exists=.env server/index.ts",
     "preview": "vp build && pnpm start",
+    "release": "vp check && bumpp --git-check",
     "prepare": "vp config"
   },
   "dependencies": {
@@ -31,6 +41,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "bumpp": "^12.3.0",
     "typescript": "~6.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"

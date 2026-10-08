@@ -146,6 +146,18 @@ mark {
   font-size: 13px;
 }
 
+.github-link {
+  display: flex;
+  padding: 6px;
+  margin: 0 -6px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.github-link:hover {
+  color: var(--text-h);
+}
+
 .url-form button[type="submit"] {
   background: var(--accent);
   border-color: var(--accent);

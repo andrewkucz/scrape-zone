@@ -1,0 +1,10 @@
+# Keep the build context small and free of local secrets.
+node_modules
+dist
+.env
+.env.*
+!.env.example
+.git
+.DS_Store
+.vscode
+*.log

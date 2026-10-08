@@ -140,6 +140,13 @@ function getBrowser(): Promise<SharedBrowser> {
   return browser;
 }
 
+/** Closes the shared browser, if one was launched. */
+export async function closeBrowser(): Promise<void> {
+  const launching = shared.__scrapeZoneBrowser;
+  shared.__scrapeZoneBrowser = undefined;
+  await launching?.then(({ browser }) => browser.close()).catch(() => {});
+}
+
 interface Captured {
   order: number;
   info: NetworkRequestInfo;

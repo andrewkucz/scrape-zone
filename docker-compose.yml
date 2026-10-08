@@ -1,0 +1,29 @@
+# Production deployment (e.g. Dokploy "Compose" app pointing at this repo).
+#
+#   APP_PASSWORD=... docker compose up -d --build
+#
+# No host ports are published: the app listens on 3000 inside the compose
+# network and a reverse proxy (Dokploy's Traefik, via a domain on the `app`
+# service, port 3000) terminates TLS in front of it. HTTPS matters here since
+# the password travels as HTTP Basic auth on every request.
+name: scrape-zone
+
+services:
+  app:
+    build: .
+    image: ${APP_IMAGE:-scrape-zone:latest}
+    environment:
+      PORT: 3000
+      # Set in Dokploy's Environment tab (or a .env next to this file).
+      APP_PASSWORD: ${APP_PASSWORD:?APP_PASSWORD is required}
+    expose:
+      - "3000"
+    # Chromium uses /dev/shm heavily; Docker's 64 MB default crashes pages.
+    shm_size: 1gb
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

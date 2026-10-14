@@ -1,40 +1,32 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-import type { MiddlewareHandler } from "hono";
-import { basicAuth } from "hono/basic-auth";
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { createMiddleware } from "hono/factory";
+import { db } from "./db/index.ts";
+import * as schema from "./db/schema.ts";
 
 /**
- * Deliberately minimal protection: one shared password (APP_PASSWORD) checked
- * with HTTP Basic auth. The browser shows its own prompt and remembers the
- * credentials for the session; the username is ignored. Use HTTPS in front of
- * it, since Basic auth sends the password with every request.
+ * Email + password accounts (better-auth), stored through Drizzle.
+ * Public sign-up is disabled: accounts are created with `server/create-user.ts`.
+ * BETTER_AUTH_SECRET (required in production) and BETTER_AUTH_URL are read from
+ * the environment by better-auth itself.
  */
-export const REALM = "scrape zone";
+export function createAuth({ allowSignUp = false } = {}) {
+  return betterAuth({
+    database: drizzleAdapter(db, { provider: "sqlite", schema }),
+    emailAndPassword: { enabled: true, disableSignUp: !allowSignUp },
+  });
+}
 
-const sha256 = (s: string) => createHash("sha256").update(s).digest();
+export const auth = createAuth();
 
-/** Returns a constant-time password check, or null when no password is configured. */
-export function createPasswordCheck(password: string | undefined) {
-  if (!password) {
-    console.warn("[auth] APP_PASSWORD is not set; scrape zone is NOT password protected.");
-    return null;
+export type AuthEnv = { Variables: { session: typeof auth.$Infer.Session } };
+
+/** Rejects requests without a valid session cookie. */
+export const requireSession = createMiddleware<AuthEnv>(async (c, next) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session) {
+    return c.json({ error: { code: "UNAUTHORIZED", message: "Sign in required" } }, 401);
   }
-  const expected = sha256(password);
-  return (candidate: string) => timingSafeEqual(sha256(candidate), expected);
-}
-
-/** Checks a raw `Authorization: Basic …` header (for non-Hono servers, i.e. Vite dev). */
-export function isAuthorizedHeader(
-  check: (password: string) => boolean,
-  header: string | undefined,
-) {
-  const match = /^Basic\s+(.+)$/i.exec(header ?? "");
-  if (!match) return false;
-  const decoded = Buffer.from(match[1]!, "base64").toString("utf8");
-  return check(decoded.slice(decoded.indexOf(":") + 1));
-}
-
-export function passwordMiddleware(password: string | undefined): MiddlewareHandler {
-  const check = createPasswordCheck(password);
-  if (!check) return (_c, next) => next();
-  return basicAuth({ realm: REALM, verifyUser: (_username, candidate) => check(candidate) });
-}
+  c.set("session", session);
+  await next();
+});

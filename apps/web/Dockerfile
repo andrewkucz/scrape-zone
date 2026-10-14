@@ -46,9 +46,12 @@ RUN apt-get update \
 COPY --from=build --chown=node:node /deploy/package.json ./
 COPY --from=build --chown=node:node /deploy/server ./server
 COPY --from=build --chown=node:node /repo/apps/web/dist ./dist
+# SQLite auth database; mount a volume here so accounts survive rebuilds.
+RUN mkdir -p data && chown node:node data
+VOLUME /app/data
 USER node
 EXPOSE 3000
-# Any non-5xx (including the 401 from the password prompt) means it's up.
+# Any non-5xx means it's up.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
 ENTRYPOINT ["/usr/bin/tini", "--"]

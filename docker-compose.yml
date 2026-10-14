@@ -1,11 +1,12 @@
 # Production deployment (e.g. Dokploy "Compose" app pointing at this repo).
 #
-#   APP_PASSWORD=... docker compose up -d --build
+#   BETTER_AUTH_SECRET=... BETTER_AUTH_URL=https://... docker compose up -d --build
+#   docker compose exec app node server/create-user.ts <email> <password> [name]
 #
 # No host ports are published: the app listens on 3000 inside the compose
 # network and a reverse proxy (Dokploy's Traefik, via a domain on the `app`
-# service, port 3000) terminates TLS in front of it. HTTPS matters here since
-# the password travels as HTTP Basic auth on every request.
+# service, port 3000) terminates TLS in front of it. Sign-up is disabled, so
+# accounts are created with the create-user command above.
 name: scrape-zone
 
 services:
@@ -19,7 +20,12 @@ services:
     environment:
       PORT: 3000
       # Set in Dokploy's Environment tab (or a .env next to this file).
-      APP_PASSWORD: ${APP_PASSWORD:?APP_PASSWORD is required}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
+      # The public https URL; better-auth checks request origins against it.
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is required}
+    volumes:
+      # Accounts and sessions (SQLite).
+      - auth-data:/app/data
     expose:
       - "3000"
     # Chromium uses /dev/shm heavily; Docker's 64 MB default crashes pages.
@@ -31,3 +37,6 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+volumes:
+  auth-data:

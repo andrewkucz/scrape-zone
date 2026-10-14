@@ -12,3 +12,6 @@ peerDependencyRules:
     - vite
   allowedVersions:
     vite: "*"
+allowBuilds:
+  # Binary ships via optional platform packages; the postinstall only verifies it.
+  esbuild: false

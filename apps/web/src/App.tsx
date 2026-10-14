@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 import type { DocKind } from "../server/scrape.ts";
 import { fetchNetwork, fetchScrape } from "./api.ts";
+import { authClient } from "./auth.ts";
 import { DocDialog } from "./components/DocDialog.tsx";
+import { History } from "./components/History.tsx";
 import { NetworkCapture } from "./components/NetworkCapture.tsx";
 import { ResultsList, type OpenTarget } from "./components/ResultsList.tsx";
 import { formatNumber, KIND_LABELS } from "./format.ts";
@@ -24,9 +26,15 @@ export function App() {
   /** The URL the user asked to run a network capture for. */
   const [networkUrl, setNetworkUrl] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
   const scrape = useQuery({
     queryKey: ["scrape", url],
-    queryFn: ({ signal }) => fetchScrape(url, signal),
+    queryFn: async ({ signal }) => {
+      const result = await fetchScrape(url, signal);
+      // The server recorded this scrape in the user's history.
+      void queryClient.invalidateQueries({ queryKey: ["history"] });
+      return result;
+    },
     enabled: url !== "",
     staleTime: Infinity,
     retry: false,
@@ -76,14 +84,22 @@ export function App() {
     return counts;
   }, [result, docById]);
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const next = input.trim();
-    if (!next) return;
+  const scrapeUrl = (next: string) => {
     const params = new URLSearchParams({ url: next });
     window.history.replaceState(null, "", `?${params}`);
     if (next === url) void scrape.refetch();
     else setUrl(next);
+  };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const next = input.trim();
+    if (next) scrapeUrl(next);
+  };
+
+  const selectHistory = (next: string) => {
+    setInput(next);
+    scrapeUrl(next);
   };
 
   const toggleKind = (kind: DocKind) =>
@@ -135,6 +151,9 @@ export function App() {
             />
           </svg>
         </a>
+        <button type="button" className="ghost" onClick={() => void authClient.signOut()}>
+          Sign out
+        </button>
       </header>
 
       {scrape.isError && (
@@ -212,6 +231,8 @@ export function App() {
             : "Enter a URL to extract JSON script tags, Next.js RSC props and the remaining HTML."}
         </div>
       )}
+
+      {!scrape.data && !scrape.isFetching && <History onSelect={selectHistory} />}
 
       {target && scrape.data && (
         <DocDialog

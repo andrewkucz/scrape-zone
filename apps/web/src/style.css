@@ -829,3 +829,107 @@ button.link {
   color: var(--danger);
   white-space: pre-wrap;
 }
+
+/* Login ------------------------------------------------------------------- */
+
+.login {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.login-form {
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-form h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  text-align: center;
+  color: var(--text-h);
+  letter-spacing: -0.02em;
+}
+
+.login-form h1 span {
+  color: var(--accent);
+}
+
+.login-form button {
+  padding: 8px 12px;
+}
+
+.login-error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+/* History ----------------------------------------------------------------- */
+
+.history {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.history h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.history ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.history li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 4px 4px 0;
+}
+
+.history li + li {
+  border-top: 1px solid var(--border);
+}
+
+.history-url {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  background: none;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-url:hover {
+  color: var(--accent);
+}
+
+.history time {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.history-remove {
+  color: var(--muted);
+  padding: 2px 8px;
+}

@@ -6,11 +6,25 @@ import { z } from "zod";
 import { auth, requireSession, type AuthEnv } from "./auth.ts";
 import { deleteHistoryEntry, listHistory, recordScrape } from "./history.ts";
 import { captureNetwork, NetworkCaptureError } from "./network.ts";
-import { normalizeUrl, scrape } from "./scrape.ts";
+import { ProxyNotConfiguredError } from "./proxy.ts";
+import { normalizeUrl, REQUEST_METHODS, scrape } from "./scrape.ts";
 
 const CLIENT_ERRORS = new Set<ScrapeErrorCode>(["INVALID_URL", "UNSUPPORTED_PROTOCOL", "NOT_HTML"]);
 
-const urlQuery = zValidator("query", z.object({ url: z.string().min(1) }));
+const scrapeRequest = zValidator(
+  "json",
+  z.object({
+    url: z.string().min(1),
+    method: z.enum(REQUEST_METHODS).default("GET"),
+    headers: z.record(z.string().min(1), z.string()).default({}),
+    body: z.string().optional(),
+    proxy: z.boolean().default(false),
+  }),
+);
+
+function proxyError(error: ProxyNotConfiguredError) {
+  return { error: { code: error.code, message: error.message } };
+}
 
 function unknownError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -22,31 +36,35 @@ const api = new Hono<AuthEnv>()
   // better-auth's own endpoints (sign in/out, session); everything after requires a session.
   .on(["GET", "POST"], "/auth/*", (c) => auth.handler(c.req.raw))
   .use(requireSession)
-  .get("/scrape", urlQuery, async (c) => {
-    const url = normalizeUrl(c.req.valid("query").url);
+  .post("/scrape", scrapeRequest, async (c) => {
+    const { url: rawUrl, ...request } = c.req.valid("json");
+    const url = normalizeUrl(rawUrl);
     try {
-      const result = await scrape(url);
-      await recordScrape(c.get("session").user.id, url);
+      const result = await scrape(url, request);
+      await recordScrape(c.get("session").user.id, url, request);
       return c.json(result, 200);
     } catch (error) {
       if (isScrapeError(error)) {
         const status = CLIENT_ERRORS.has(error.code) ? 400 : 502;
         return c.json({ error: { code: error.code, message: error.message } }, status);
       }
+      if (error instanceof ProxyNotConfiguredError) return c.json(proxyError(error), 503);
       return c.json(unknownError(error), 500);
     }
   })
   // Expensive (launches a browser page), so the client only calls it on demand.
-  .get("/network", urlQuery, async (c) => {
-    const url = normalizeUrl(c.req.valid("query").url);
+  .post("/network", scrapeRequest, async (c) => {
+    const { url: rawUrl, ...request } = c.req.valid("json");
+    const url = normalizeUrl(rawUrl);
     try {
-      return c.json(await captureNetwork(url), 200);
+      return c.json(await captureNetwork(url, request), 200);
     } catch (error) {
       if (error instanceof NetworkCaptureError) {
         const status =
           error.code === "INVALID_URL" ? 400 : error.code === "NAVIGATION_FAILED" ? 502 : 500;
         return c.json({ error: { code: error.code, message: error.message } }, status);
       }
+      if (error instanceof ProxyNotConfiguredError) return c.json(proxyError(error), 503);
       return c.json(unknownError(error), 500);
     }
   })

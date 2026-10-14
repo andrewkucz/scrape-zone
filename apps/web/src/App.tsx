@@ -1,8 +1,16 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 import type { DocKind } from "../server/scrape.ts";
-import { fetchNetwork, fetchScrape } from "./api.ts";
+import { fetchNetwork, fetchScrape, type HistoryEntry, type ScrapeRequest } from "./api.ts";
 import { authClient } from "./auth.ts";
+import {
+  AdvancedOptions,
+  countActive,
+  EMPTY_DRAFT,
+  fromRequestOptions,
+  toRequestOptions,
+  type AdvancedDraft,
+} from "./components/AdvancedOptions.tsx";
 import { DocDialog } from "./components/DocDialog.tsx";
 import { History } from "./components/History.tsx";
 import { NetworkCapture } from "./components/NetworkCapture.tsx";
@@ -13,24 +21,32 @@ import { useSearch } from "./search/useSearch.ts";
 const ALL_KINDS: DocKind[] = ["json", "rsc", "network", "html"];
 const EMPTY_COUNTS: Record<DocKind, number> = { json: 0, rsc: 0, network: 0, html: 0 };
 
-function readUrlParam() {
-  return new URLSearchParams(window.location.search).get("url") ?? "";
+/** Compared the way the query cache compares keys. */
+function sameRequest(a: ScrapeRequest, b: ScrapeRequest) {
+  return hashKey([a]) === hashKey([b]);
 }
 
 export function App() {
-  const [input, setInput] = useState(readUrlParam);
-  const [url, setUrl] = useState(readUrlParam);
+  const [input, setInput] = useState("");
+  const [advanced, setAdvanced] = useState<AdvancedDraft>(EMPTY_DRAFT);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  /** The last submitted request; the scrape query follows it. */
+  const [request, setRequest] = useState<ScrapeRequest>(() => ({
+    url: "",
+    ...toRequestOptions(EMPTY_DRAFT),
+  }));
+  const { url } = request;
   const [query, setQuery] = useState("");
   const [kinds, setKinds] = useState<DocKind[]>(ALL_KINDS);
   const [target, setTarget] = useState<OpenTarget | null>(null);
-  /** The URL the user asked to run a network capture for. */
-  const [networkUrl, setNetworkUrl] = useState<string | null>(null);
+  /** The request the user asked to run a network capture for. */
+  const [networkRequest, setNetworkRequest] = useState<ScrapeRequest | null>(null);
 
   const queryClient = useQueryClient();
   const scrape = useQuery({
-    queryKey: ["scrape", url],
+    queryKey: ["scrape", request],
     queryFn: async ({ signal }) => {
-      const result = await fetchScrape(url, signal);
+      const result = await fetchScrape(request, signal);
       // The server recorded this scrape in the user's history.
       void queryClient.invalidateQueries({ queryKey: ["history"] });
       return result;
@@ -41,16 +57,16 @@ export function App() {
   });
 
   const network = useQuery({
-    queryKey: ["network", url],
-    queryFn: ({ signal }) => fetchNetwork(url, signal),
-    enabled: url !== "" && networkUrl === url,
+    queryKey: ["network", request],
+    queryFn: ({ signal }) => fetchNetwork(request, signal),
+    enabled: url !== "" && networkRequest === request,
     staleTime: Infinity,
     retry: false,
   });
 
   const captureNetwork = () => {
-    if (networkUrl === url) void network.refetch();
-    else setNetworkUrl(url);
+    if (networkRequest === request) void network.refetch();
+    else setNetworkRequest(request);
   };
 
   // Network docs slot in before the HTML so each kind stays one contiguous section.
@@ -84,22 +100,22 @@ export function App() {
     return counts;
   }, [result, docById]);
 
-  const scrapeUrl = (next: string) => {
-    const params = new URLSearchParams({ url: next });
-    window.history.replaceState(null, "", `?${params}`);
-    if (next === url) void scrape.refetch();
-    else setUrl(next);
+  const run = (next: ScrapeRequest) => {
+    if (sameRequest(next, request)) void scrape.refetch();
+    else setRequest(next);
   };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const next = input.trim();
-    if (next) scrapeUrl(next);
+    if (next) run({ url: next, ...toRequestOptions(advanced) });
   };
 
-  const selectHistory = (next: string) => {
+  // Restores the URL and the options it was last scraped with.
+  const selectHistory = ({ url: next, request: options }: HistoryEntry) => {
     setInput(next);
-    scrapeUrl(next);
+    setAdvanced(fromRequestOptions(options));
+    run({ url: next, ...options });
   };
 
   const toggleKind = (kind: DocKind) =>
@@ -113,6 +129,7 @@ export function App() {
   const onClose = useCallback(() => setTarget(null), []);
 
   const hasQuery = query !== "";
+  const activeOptions = countActive(advanced);
 
   return (
     <div className="app">
@@ -120,7 +137,7 @@ export function App() {
         <h1>
           scrape<span>zone</span>
         </h1>
-        <form className="url-form" onSubmit={submit}>
+        <form id="url-form" className="url-form" onSubmit={submit}>
           <input
             type="text"
             inputMode="url"
@@ -130,6 +147,19 @@ export function App() {
             autoFocus={!url}
             aria-label="Page URL"
           />
+          <button
+            type="button"
+            className={activeOptions > 0 ? "advanced-toggle active" : "advanced-toggle"}
+            aria-expanded={showAdvanced}
+            aria-controls="advanced-options"
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            Advanced
+            {activeOptions > 0 && <span className="chip-count">{activeOptions}</span>}
+            <span className="advanced-caret" aria-hidden="true">
+              {showAdvanced ? "▴" : "▾"}
+            </span>
+          </button>
           <button type="submit" disabled={scrape.isFetching}>
             {scrape.isFetching ? "Scraping…" : "Scrape"}
           </button>
@@ -155,6 +185,15 @@ export function App() {
           Sign out
         </button>
       </header>
+
+      {showAdvanced && (
+        <AdvancedOptions
+          id="advanced-options"
+          form="url-form"
+          value={advanced}
+          onChange={setAdvanced}
+        />
+      )}
 
       {scrape.isError && (
         <div className="error">

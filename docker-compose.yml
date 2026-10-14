@@ -25,6 +25,8 @@ services:
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is required}
       # Empty or unset blocks signups. Recreate the container after changing.
       USER_EMAILS: ${USER_EMAILS:-}
+      # Enables the "Proxy (EU)" advanced option; unset makes proxied requests fail.
+      PROXY_PASSWORD: ${PROXY_PASSWORD:-}
     volumes:
       # Accounts and sessions (SQLite).
       - auth-data:/app/data

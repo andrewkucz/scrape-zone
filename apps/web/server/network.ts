@@ -1,9 +1,12 @@
 import { chromium, type Browser, type Request, type Response } from "playwright";
+import { playwrightProxy } from "./proxy.ts";
 import {
+  DEFAULT_REQUEST,
   describe,
   makeDoc,
   toPrettyJson,
   type NetworkRequestInfo,
+  type RequestOptions,
   type ScrapedDoc,
 } from "./scrape.ts";
 
@@ -226,7 +229,10 @@ function timeout<T>(ms: number, value: T): Promise<T> {
  * Loads `url` in headless Chromium and records every JSON response the page
  * receives until the network has been idle for IDLE_MS (or MAX_MS elapses).
  */
-export async function captureNetwork(url: string): Promise<NetworkResult> {
+export async function captureNetwork(
+  url: string,
+  options: RequestOptions = DEFAULT_REQUEST,
+): Promise<NetworkResult> {
   let pageUrl: URL;
   try {
     pageUrl = new URL(url);
@@ -237,12 +243,37 @@ export async function captureNetwork(url: string): Promise<NetworkResult> {
     throw new NetworkCaptureError("INVALID_URL", `Unsupported protocol "${pageUrl.protocol}"`);
   }
 
+  const proxy = options.proxy ? playwrightProxy() : undefined;
   const { browser, userAgent, userAgentMetadata } = await getBrowser();
-  const context = await browser.newContext({ userAgent, viewport: { width: 1366, height: 900 } });
+  const context = await browser.newContext({
+    userAgent,
+    viewport: { width: 1366, height: 900 },
+    proxy,
+  });
   const page = await context.newPage();
   if (userAgentMetadata) {
     const cdp = await context.newCDPSession(page);
     await cdp.send("Emulation.setUserAgentOverride", { userAgent, userAgentMetadata });
+  }
+
+  // Only the page request gets the custom method/headers/body, so e.g. an
+  // Authorization header isn't leaked to third-party subresources.
+  if (options.method !== "GET" || Object.keys(options.headers).length > 0) {
+    await page.route(
+      (u) => u.href === pageUrl.href,
+      async (route) => {
+        const headers = { ...(await route.request().allHeaders()) };
+        for (const [name, value] of Object.entries(options.headers)) {
+          headers[name.toLowerCase()] = value;
+        }
+        await route.continue({
+          method: options.method,
+          headers: withoutPseudoHeaders(headers),
+          postData: options.method === "GET" ? undefined : options.body,
+        });
+      },
+      { times: 1 },
+    );
   }
 
   const started = performance.now();

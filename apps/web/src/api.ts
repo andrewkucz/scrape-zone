@@ -1,11 +1,17 @@
 import { hc, type InferResponseType } from "hono/client";
 import type { AppType } from "../server/app.ts";
+import type { RequestOptions } from "../server/scrape.ts";
 import { authClient } from "./auth.ts";
 
 const client = hc<AppType>("/");
 
-export type ScrapeResponse = InferResponseType<typeof client.api.scrape.$get, 200>;
-export type NetworkResponse = InferResponseType<typeof client.api.network.$get, 200>;
+export type ScrapeResponse = InferResponseType<typeof client.api.scrape.$post, 200>;
+export type NetworkResponse = InferResponseType<typeof client.api.network.$post, 200>;
+
+/** A page URL plus the request options to fetch it with. */
+export interface ScrapeRequest extends RequestOptions {
+  url: string;
+}
 export type HistoryEntry = InferResponseType<
   typeof client.api.history.$get,
   200
@@ -30,14 +36,20 @@ async function toError(res: { status: number; json(): Promise<unknown> }) {
   );
 }
 
-export async function fetchScrape(url: string, signal?: AbortSignal): Promise<ScrapeResponse> {
-  const res = await client.api.scrape.$get({ query: { url } }, { init: { signal } });
+export async function fetchScrape(
+  request: ScrapeRequest,
+  signal?: AbortSignal,
+): Promise<ScrapeResponse> {
+  const res = await client.api.scrape.$post({ json: request }, { init: { signal } });
   if (res.status === 200) return res.json();
   throw await toError(res);
 }
 
-export async function fetchNetwork(url: string, signal?: AbortSignal): Promise<NetworkResponse> {
-  const res = await client.api.network.$get({ query: { url } }, { init: { signal } });
+export async function fetchNetwork(
+  request: ScrapeRequest,
+  signal?: AbortSignal,
+): Promise<NetworkResponse> {
+  const res = await client.api.network.$post({ json: request }, { init: { signal } });
   if (res.status === 200) return res.json();
   throw await toError(res);
 }

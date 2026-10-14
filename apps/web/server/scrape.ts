@@ -1,7 +1,24 @@
 import beautify from "js-beautify";
 import { fetchAllPageData } from "scrape-ts";
+import { getProxyFetch } from "./proxy.ts";
 
 export type DocKind = "json" | "rsc" | "network" | "html";
+
+export const REQUEST_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+export type RequestMethod = (typeof REQUEST_METHODS)[number];
+
+/** User-specified overrides for the page request. */
+export interface RequestOptions {
+  method: RequestMethod;
+  /** Merged over the default browser-like headers. */
+  headers: Record<string, string>;
+  /** Ignored for GET requests. */
+  body?: string;
+  /** Route the request through the EU proxy. */
+  proxy: boolean;
+}
+
+export const DEFAULT_REQUEST: RequestOptions = { method: "GET", headers: {}, proxy: false };
 
 /** Everything needed to re-create a captured network request. */
 export interface NetworkRequestInfo {
@@ -114,9 +131,20 @@ export function normalizeUrl(input: string): string {
   return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
-export async function scrape(url: string): Promise<ScrapeResult> {
+export async function scrape(
+  url: string,
+  request: RequestOptions = DEFAULT_REQUEST,
+): Promise<ScrapeResult> {
   const fetchStart = performance.now();
-  const { jsonScripts, nextRscProps, html } = await fetchAllPageData(url, { timeoutMs: 20_000 });
+  const { jsonScripts, nextRscProps, html } = await fetchAllPageData(url, {
+    timeoutMs: 20_000,
+    fetch: request.proxy ? getProxyFetch() : undefined,
+    headers: request.headers,
+    init: {
+      method: request.method,
+      body: request.method === "GET" ? undefined : request.body,
+    },
+  });
   const formatStart = performance.now();
 
   const docs: ScrapedDoc[] = [

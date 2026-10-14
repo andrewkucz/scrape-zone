@@ -933,3 +933,15 @@ button.link {
   color: var(--muted);
   padding: 2px 8px;
 }
+
+.login-note,
+.login-link {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+}
+
+.login-link {
+  padding: 8px;
+  color: var(--accent);
+}

@@ -1,5 +1,5 @@
 /**
- * Creates an account, since public sign-up is disabled:
+ * Creates an account for an email listed in USER_EMAILS:
  *   node --env-file-if-exists=.env server/create-user.ts <email> <password> [name]
  */
 import { createAuth } from "./auth.ts";
@@ -11,7 +11,7 @@ if (!email || !password || !name) {
 }
 
 try {
-  const { user } = await createAuth({ allowSignUp: true }).api.signUpEmail({
+  const { user } = await createAuth().api.signUpEmail({
     body: { email, password, name },
   });
   console.log(`Created ${user.email} (${user.id})`);

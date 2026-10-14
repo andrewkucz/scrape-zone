@@ -10,12 +10,12 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
 });
 
-/** Shows the login page at /login and gates everything else behind a session. */
+/** Shows authentication pages at /login and /signup and gates everything else behind a session. */
 function Root() {
   const session = authClient.useSession();
   const [path, setPath] = useState(window.location.pathname);
   const signedIn = session.data != null;
-  const onLogin = path === "/login";
+  const onLogin = path === "/login" || path === "/signup";
 
   const navigate = (to: string) => {
     window.history.replaceState(null, "", to);
@@ -33,7 +33,7 @@ function Root() {
   }, [signedIn, onLogin]);
 
   if (session.isPending) return null;
-  if (onLogin) return signedIn ? null : <Login />;
+  if (onLogin) return signedIn ? null : <Login key={path} signup={path === "/signup"} />;
   return signedIn ? <App /> : null;
 }
 

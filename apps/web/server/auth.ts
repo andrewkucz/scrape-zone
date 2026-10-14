@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createMiddleware } from "hono/factory";
 import { db } from "./db/index.ts";
@@ -6,14 +7,33 @@ import * as schema from "./db/schema.ts";
 
 /**
  * Email + password accounts (better-auth), stored through Drizzle.
- * Public sign-up is disabled: accounts are created with `server/create-user.ts`.
+ * Account creation is restricted to the USER_EMAILS allowlist.
  * BETTER_AUTH_SECRET (required in production) and BETTER_AUTH_URL are read from
  * the environment by better-auth itself.
  */
-export function createAuth({ allowSignUp = false } = {}) {
+export function createAuth() {
+  const allowedEmails = new Set(
+    (process.env.USER_EMAILS ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
   return betterAuth({
     database: drizzleAdapter(db, { provider: "sqlite", schema }),
-    emailAndPassword: { enabled: true, disableSignUp: !allowSignUp },
+    emailAndPassword: { enabled: true },
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => {
+            if (!allowedEmails.has(user.email.trim().toLowerCase())) {
+              throw new APIError("FORBIDDEN", {
+                message: "Signups are not permitted for this email address.",
+              });
+            }
+          },
+        },
+      },
+    },
   });
 }
 

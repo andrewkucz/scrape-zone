@@ -1,0 +1,74 @@
+{
+  "name": "scrape-ts",
+  "version": "1.0.1",
+  "description": "Typed web scraping helpers: extract JSON-LD, JSON script tags and Next.js React Server Component data, validated with any Standard Schema (Zod, Valibot, ArkType, ...).",
+  "keywords": [
+    "arktype",
+    "flight",
+    "json-ld",
+    "nextjs",
+    "react-server-components",
+    "rsc",
+    "scrape",
+    "scraper",
+    "scraping",
+    "standard-schema",
+    "structured-data",
+    "valibot",
+    "zod"
+  ],
+  "homepage": "https://github.com/andrewkucz/scrape-ts#readme",
+  "bugs": {
+    "url": "https://github.com/andrewkucz/scrape-ts/issues"
+  },
+  "license": "MIT",
+  "author": "Andrew Kuczynski",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrewkucz/scrape-ts.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build",
+    "prepare": "vp config",
+    "release": "bumpp && pnpm publish"
+  },
+  "dependencies": {
+    "@rsc-parser/react-client": "1.1.2",
+    "@standard-schema/spec": "^1.1.0",
+    "cheerio": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "bumpp": "^11.1.0",
+    "typescript": "^7.0.2",
+    "valibot": "^1.5.0",
+    "vite-plus": "catalog:",
+    "zod": "^4.6.5"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.9.1",
+      "onFail": "download"
+    }
+  },
+  "engines": {
+    "node": ">=20.3.0"
+  }
+}

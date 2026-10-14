@@ -1,6 +1,6 @@
 {
   "name": "scrape",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "description": "Monorepo for scrape-zone (web scraping test bed) and the scrape-ts library.",
   "homepage": "https://github.com/andrewkucz/scrape-zone#readme",

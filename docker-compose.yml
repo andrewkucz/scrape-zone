@@ -5,8 +5,8 @@
 #
 # No host ports are published: the app listens on 3000 inside the compose
 # network and a reverse proxy (Dokploy's Traefik, via a domain on the `app`
-# service, port 3000) terminates TLS in front of it. Sign-up is disabled, so
-# accounts are created with the create-user command above.
+# service, port 3000) terminates TLS in front of it. Set USER_EMAILS to a
+# comma-separated allowlist to permit account creation at /signup or via CLI.
 name: scrape-zone
 
 services:
@@ -23,6 +23,8 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
       # The public https URL; better-auth checks request origins against it.
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is required}
+      # Empty or unset blocks signups. Recreate the container after changing.
+      USER_EMAILS: ${USER_EMAILS:-}
     volumes:
       # Accounts and sessions (SQLite).
       - auth-data:/app/data

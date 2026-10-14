@@ -1,9 +1,6 @@
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
-  staged: {
-    "*": "vp check --fix",
-  },
   pack: {
     deps: {
       // tsdown <0.23 compatibility: resolve external dependency subpaths.
@@ -16,11 +13,4 @@ export default defineConfig({
     },
     exports: true,
   },
-  lint: {
-    options: {
-      typeAware: true,
-      typeCheck: true,
-    },
-  },
-  fmt: {},
 });

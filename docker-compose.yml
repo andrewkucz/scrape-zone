@@ -10,7 +10,11 @@ name: scrape-zone
 
 services:
   app:
-    build: .
+    # The whole workspace is the build context: the app consumes scrape-ts
+    # from packages/scrape-ts.
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
     image: ${APP_IMAGE:-scrape-zone:latest}
     environment:
       PORT: 3000

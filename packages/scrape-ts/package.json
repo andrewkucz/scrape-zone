@@ -17,15 +17,16 @@
     "valibot",
     "zod"
   ],
-  "homepage": "https://github.com/andrewkucz/scrape-ts#readme",
+  "homepage": "https://github.com/andrewkucz/scrape-zone/tree/main/packages/scrape-ts#readme",
   "bugs": {
-    "url": "https://github.com/andrewkucz/scrape-ts/issues"
+    "url": "https://github.com/andrewkucz/scrape-zone/issues"
   },
   "license": "MIT",
   "author": "Andrew Kuczynski",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/andrewkucz/scrape-ts.git"
+    "url": "git+https://github.com/andrewkucz/scrape-zone.git",
+    "directory": "packages/scrape-ts"
   },
   "files": [
     "dist"
@@ -43,10 +44,8 @@
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
-    "check": "vp check",
     "prepublishOnly": "vp run build",
-    "prepare": "vp config",
-    "release": "bumpp && pnpm publish"
+    "release": "bumpp --tag \"scrape-ts@%s\" --commit \"chore(scrape-ts): release v%s\" --git-check && pnpm publish"
   },
   "dependencies": {
     "@rsc-parser/react-client": "1.1.2",
@@ -55,18 +54,11 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
-    "bumpp": "^11.1.0",
-    "typescript": "^7.0.2",
+    "bumpp": "^12.3.0",
+    "typescript": "catalog:",
     "valibot": "^1.5.0",
     "vite-plus": "catalog:",
     "zod": "^4.6.5"
-  },
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "12.9.1",
-      "onFail": "download"
-    }
   },
   "engines": {
     "node": ">=20.3.0"

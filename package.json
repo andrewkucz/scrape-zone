@@ -18,7 +18,7 @@
     "start": "vp run --filter scrape-zone start",
     "test": "vp run -r test",
     "release": "vp check && bumpp package.json apps/web/package.json --git-check",
-    "release:scrape-ts": "vp check && vp run --filter scrape-ts test && vp run --filter scrape-ts release",
+    "release:lib": "vp check && vp run --filter scrape-ts test && vp run --filter scrape-ts release",
     "prepare": "vp config"
   },
   "devDependencies": {

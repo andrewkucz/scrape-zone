@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "./db/index.ts";
 import { scrapeHistory } from "./db/schema.ts";
-import type { RequestMethod, RequestOptions } from "./scrape.ts";
+import type { RequestMethod, RequestOptions } from "./request.ts";
 
 const HISTORY_LIMIT = 50;
 

@@ -1,12 +1,11 @@
 import { chromium, type Browser, type Request, type Response } from "playwright";
 import { playwrightProxy } from "./proxy.ts";
+import { DEFAULT_REQUEST, type RequestOptions } from "./request.ts";
 import {
-  DEFAULT_REQUEST,
   describe,
   makeDoc,
   toPrettyJson,
   type NetworkRequestInfo,
-  type RequestOptions,
   type ScrapedDoc,
 } from "./scrape.ts";
 

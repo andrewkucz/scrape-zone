@@ -1,4 +1,4 @@
-import { REQUEST_METHODS, type RequestMethod, type RequestOptions } from "../../server/scrape.ts";
+import { REQUEST_METHODS, type RequestMethod, type RequestOptions } from "../../server/request.ts";
 
 export interface HeaderRow {
   name: string;

@@ -1,6 +1,6 @@
 import { hc, type InferResponseType } from "hono/client";
 import type { AppType } from "../server/app.ts";
-import type { RequestOptions } from "../server/scrape.ts";
+import type { RequestOptions } from "../server/request.ts";
 import { authClient } from "./auth.ts";
 
 const client = hc<AppType>("/");

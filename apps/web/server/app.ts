@@ -7,7 +7,8 @@ import { auth, requireSession, type AuthEnv } from "./auth.ts";
 import { deleteHistoryEntry, listHistory, recordScrape } from "./history.ts";
 import { captureNetwork, NetworkCaptureError } from "./network.ts";
 import { ProxyNotConfiguredError } from "./proxy.ts";
-import { normalizeUrl, REQUEST_METHODS, scrape } from "./scrape.ts";
+import { REQUEST_METHODS } from "./request.ts";
+import { normalizeUrl, scrape } from "./scrape.ts";
 
 const CLIENT_ERRORS = new Set<ScrapeErrorCode>(["INVALID_URL", "UNSUPPORTED_PROTOCOL", "NOT_HTML"]);
 

@@ -1,24 +1,9 @@
 import beautify from "js-beautify";
 import { fetchAllPageData } from "scrape-ts";
 import { getProxyFetch } from "./proxy.ts";
+import { DEFAULT_REQUEST, type RequestOptions } from "./request.ts";
 
 export type DocKind = "json" | "rsc" | "network" | "html";
-
-export const REQUEST_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
-export type RequestMethod = (typeof REQUEST_METHODS)[number];
-
-/** User-specified overrides for the page request. */
-export interface RequestOptions {
-  method: RequestMethod;
-  /** Merged over the default browser-like headers. */
-  headers: Record<string, string>;
-  /** Ignored for GET requests. */
-  body?: string;
-  /** Route the request through the EU proxy. */
-  proxy: boolean;
-}
-
-export const DEFAULT_REQUEST: RequestOptions = { method: "GET", headers: {}, proxy: false };
 
 /** Everything needed to re-create a captured network request. */
 export interface NetworkRequestInfo {

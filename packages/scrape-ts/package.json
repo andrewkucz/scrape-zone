@@ -1,6 +1,6 @@
 {
   "name": "scrape-ts",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Typed web scraping helpers: extract JSON-LD, JSON script tags and Next.js React Server Component data, validated with any Standard Schema (Zod, Valibot, ArkType, ...).",
   "keywords": [
     "arktype",

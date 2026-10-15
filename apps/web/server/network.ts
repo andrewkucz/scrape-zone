@@ -1,10 +1,17 @@
 import { chromium, type Browser, type Request, type Response } from "playwright";
+import {
+  parseTextRemixDeferredBody,
+  parseTextXScriptTurboStreamBody,
+  TEXT_REMIX_DEFERRED_CONTENT_TYPE,
+  TEXT_X_SCRIPT_CONTENT_TYPE,
+} from "scrape-ts";
 import { playwrightProxy } from "./proxy.ts";
 import { DEFAULT_REQUEST, type RequestOptions } from "./request.ts";
 import {
   describe,
   makeDoc,
   toPrettyJson,
+  type BodyParser,
   type NetworkRequestInfo,
   type ScrapedDoc,
 } from "./scrape.ts";
@@ -20,7 +27,34 @@ const JSON_CONTENT_TYPE = /[/+]json\b/i;
 /** Anti-JSON-hijacking prefixes some APIs put in front of the body. */
 const XSSI_PREFIX = /^(?:\)\]\}'?,?|for\s*\(;;\);|while\s*\(1\);)\s*/;
 
-export type NetworkErrorCode = "INVALID_URL" | "BROWSER_LAUNCH_FAILED" | "NAVIGATION_FAILED";
+/** Framework data formats that need decoding (with the named scrape-ts function) before display. */
+const BODY_PARSERS: Array<{
+  contentType: RegExp;
+  name: BodyParser;
+  parse: (body: string) => unknown;
+}> = [
+  {
+    // Remix v1/v2 `defer()` loader responses.
+    contentType: TEXT_REMIX_DEFERRED_CONTENT_TYPE,
+    name: "parseTextRemixDeferredBody",
+    parse: parseTextRemixDeferredBody,
+  },
+  {
+    // React Router 7 / Remix single fetch (turbo-stream) `.data` responses.
+    contentType: TEXT_X_SCRIPT_CONTENT_TYPE,
+    name: "parseTextXScriptTurboStreamBody",
+    parse: parseTextXScriptTurboStreamBody,
+  },
+];
+
+const parserFor = (contentType: string) =>
+  BODY_PARSERS.find((p) => p.contentType.test(contentType)) ?? null;
+
+export type NetworkErrorCode =
+  | "INVALID_URL"
+  | "UNSUPPORTED_METHOD"
+  | "BROWSER_LAUNCH_FAILED"
+  | "NAVIGATION_FAILED";
 
 export class NetworkCaptureError extends Error {
   code: NetworkErrorCode;
@@ -160,11 +194,28 @@ function withoutPseudoHeaders(headers: Record<string, string>): Record<string, s
   return Object.fromEntries(Object.entries(headers).filter(([name]) => !name.startsWith(":")));
 }
 
+/**
+ * Splits a `Cookie` request header into cookies for `pageUrl`. Playwright ignores a Cookie
+ * header set via `route.continue()`, so these go into the browser's cookie store instead
+ * (which also sends them on the page's own same-site requests, as a real browser would).
+ */
+function cookiesFromHeader(header: string, pageUrl: URL) {
+  return header.split(";").flatMap((pair) => {
+    const eq = pair.indexOf("=");
+    const name = (eq === -1 ? "" : pair.slice(0, eq)).trim();
+    if (!name) return [];
+    // `url` (rather than `domain`) makes them host-only cookies with path "/", like the
+    // server would most likely have set them, and keeps `__Host-` cookies valid.
+    return [{ name, value: pair.slice(eq + 1).trim(), url: `${pageUrl.origin}/` }];
+  });
+}
+
 function shouldCapture(response: Response): boolean {
   const status = response.status();
   if (status === 204 || (status >= 300 && status < 400)) return false;
   if (response.request().method() === "OPTIONS") return false;
-  return JSON_CONTENT_TYPE.test(response.headers()["content-type"] ?? "");
+  const contentType = response.headers()["content-type"] ?? "";
+  return JSON_CONTENT_TYPE.test(contentType) || parserFor(contentType) !== null;
 }
 
 function labelFor(request: Request, pageUrl: URL): string {
@@ -184,11 +235,15 @@ async function collect(response: Response, order: number, pageUrl: URL): Promise
     if (body.byteLength > MAX_BODY_BYTES) return null;
 
     const raw = body.toString("utf8");
+    const contentType = (responseHeaders["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+    const parser = parserFor(contentType);
     let text = raw;
     let parsed = false;
     let summary = "";
     try {
-      const value: unknown = JSON.parse(raw.replace(XSSI_PREFIX, ""));
+      const value: unknown = parser
+        ? await parser.parse(raw)
+        : JSON.parse(raw.replace(XSSI_PREFIX, ""));
       text = toPrettyJson(value);
       parsed = true;
       summary = describe(value);
@@ -210,6 +265,9 @@ async function collect(response: Response, order: number, pageUrl: URL): Promise
         status: response.status(),
         statusText: response.statusText(),
         responseHeaders: withoutPseudoHeaders(responseHeaders),
+        contentType,
+        parser: parser?.name ?? null,
+        rawBody: parser && parsed ? raw : null,
         durationMs: responseEnd >= 0 ? Math.round(responseEnd) : null,
         parsed,
       },
@@ -225,7 +283,7 @@ function timeout<T>(ms: number, value: T): Promise<T> {
 }
 
 /**
- * Loads `url` in headless Chromium and records every JSON response the page
+ * Loads `url` in headless Chromium and records every JSON (or Remix / React Router data) response the page
  * receives until the network has been idle for IDLE_MS (or MAX_MS elapses).
  */
 export async function captureNetwork(
@@ -241,6 +299,14 @@ export async function captureNetwork(
   if (pageUrl.protocol !== "http:" && pageUrl.protocol !== "https:") {
     throw new NetworkCaptureError("INVALID_URL", `Unsupported protocol "${pageUrl.protocol}"`);
   }
+  // A browser navigation is always a GET; replaying another method would also resend its
+  // body to whatever the page loads, so the client disables capture for non-GET requests.
+  if (options.method !== "GET") {
+    throw new NetworkCaptureError(
+      "UNSUPPORTED_METHOD",
+      `Network capture only supports GET requests, not ${options.method}`,
+    );
+  }
 
   const proxy = options.proxy ? playwrightProxy() : undefined;
   const { browser, userAgent, userAgentMetadata } = await getBrowser();
@@ -255,21 +321,26 @@ export async function captureNetwork(
     await cdp.send("Emulation.setUserAgentOverride", { userAgent, userAgentMetadata });
   }
 
-  // Only the page request gets the custom method/headers/body, so e.g. an
-  // Authorization header isn't leaked to third-party subresources.
-  if (options.method !== "GET" || Object.keys(options.headers).length > 0) {
+  const customHeaders = Object.entries(options.headers).map(
+    ([name, value]) => [name.toLowerCase(), value] as const,
+  );
+  const cookies = customHeaders
+    .filter(([name]) => name === "cookie")
+    .flatMap(([, value]) => cookiesFromHeader(value, pageUrl));
+  // One at a time: Chromium rejects the whole batch if any cookie is invalid (e.g. a
+  // `__Host-` cookie on plain http), and the rest should still be sent.
+  await Promise.all(cookies.map((cookie) => context.addCookies([cookie]).catch(() => {})));
+
+  // The other custom headers only go on the page request, so e.g. an Authorization
+  // header isn't leaked to third-party subresources.
+  const pageHeaders = customHeaders.filter(([name]) => name !== "cookie");
+  if (pageHeaders.length > 0) {
     await page.route(
       (u) => u.href === pageUrl.href,
       async (route) => {
         const headers = { ...(await route.request().allHeaders()) };
-        for (const [name, value] of Object.entries(options.headers)) {
-          headers[name.toLowerCase()] = value;
-        }
-        await route.continue({
-          method: options.method,
-          headers: withoutPseudoHeaders(headers),
-          postData: options.method === "GET" ? undefined : options.body,
-        });
+        for (const [name, value] of pageHeaders) headers[name] = value;
+        await route.continue({ headers: withoutPseudoHeaders(headers) });
       },
       { times: 1 },
     );

@@ -6,6 +6,9 @@ import { DEFAULT_REQUEST, type RequestOptions } from "./request.ts";
 export type DocKind = "json" | "rsc" | "network" | "html";
 
 /** Everything needed to re-create a captured network request. */
+/** The scrape-ts function that decodes a framework data response body. */
+export type BodyParser = "parseTextRemixDeferredBody" | "parseTextXScriptTurboStreamBody";
+
 export interface NetworkRequestInfo {
   method: string;
   url: string;
@@ -15,8 +18,14 @@ export interface NetworkRequestInfo {
   status: number;
   statusText: string;
   responseHeaders: Record<string, string>;
+  /** Response MIME type without parameters, e.g. `application/json` or `text/remix-deferred`. */
+  contentType: string;
+  /** Set when the body is a framework data format that needed decoding rather than plain JSON. */
+  parser: BodyParser | null;
+  /** The undecoded body when `parser` succeeded; `text` then holds the decoded value. */
+  rawBody: string | null;
   durationMs: number | null;
-  /** False when the response claimed to be JSON but did not parse; `text` is then the raw body. */
+  /** False when the body did not parse as its content type; `text` is then the raw body. */
   parsed: boolean;
 }
 

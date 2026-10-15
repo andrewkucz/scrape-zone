@@ -1,0 +1,17 @@
+{
+  "name": "test-bed",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Scratch script runner for trying out scrape-ts.",
+  "type": "module",
+  "scripts": {
+    "start": "node index.ts"
+  },
+  "dependencies": {
+    "scrape-ts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "catalog:"
+  }
+}

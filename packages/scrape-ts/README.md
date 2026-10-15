@@ -93,6 +93,39 @@ const chunks = await fetchNextRscChunks("https://example.com");
 for (const chunk of chunks.model) console.log(chunk.id, chunk.value);
 ```
 
+## Remix / React Router data responses
+
+Remix and React Router load route data through their own response formats rather than plain JSON. If you have one of these response bodies (from a browser's network tab or your own `fetch`), use the parser that matches its `Content-Type`:
+
+| Content-Type          | Used by                                                    | Parser                                   |
+| --------------------- | ---------------------------------------------------------- | ---------------------------------------- |
+| `text/remix-deferred` | Remix v1/v2 loaders that return `defer()`                  | `await parseTextRemixDeferredBody(body)` |
+| `text/x-script`       | React Router 7 / Remix single fetch `.data` (turbo-stream) | `parseTextXScriptTurboStreamBody(body)`  |
+
+```ts
+import {
+  parseTextRemixDeferredBody,
+  parseTextXScriptTurboStreamBody,
+  TEXT_REMIX_DEFERRED_CONTENT_TYPE,
+  TEXT_X_SCRIPT_CONTENT_TYPE,
+} from "scrape-ts";
+
+const response = await fetch("https://example.com/products/123.data");
+const contentType = response.headers.get("content-type") ?? "";
+const body = await response.text();
+
+const data = TEXT_X_SCRIPT_CONTENT_TYPE.test(contentType)
+  ? parseTextXScriptTurboStreamBody(body)
+  : TEXT_REMIX_DEFERRED_CONTENT_TYPE.test(contentType)
+    ? await parseTextRemixDeferredBody(body)
+    : JSON.parse(body);
+```
+
+Both parsers work on a complete body, so each deferred or streamed promise is replaced by the value it resolved to.
+
+- `parseTextRemixDeferredBody` also accepts a `ReadableStream`. It rejects if the body is malformed or any deferred value errored.
+- `parseTextXScriptTurboStreamBody` resolves turbo-stream's index references into plain nested data and keeps shared references shared. A rejected promise becomes its error, as `{ name, message }`. A `Map` becomes an object, a `Set` becomes an array, and a `URL` becomes a string. React Router's `ErrorResponse` becomes `{ status, statusText, data }`. It throws a `SyntaxError` on malformed input.
+
 ## Working with HTML you already have
 
 Each fetching helper has a pure counterpart that takes an HTML string and makes no network request:
@@ -121,6 +154,8 @@ interface FetchOptions {
   signal?: AbortSignal;
   /** Request timeout in ms, or false to disable. Default: 15000. */
   timeoutMs?: number | false;
+  /** Throw BOT_PROTECTION when the response is a bot protection block or challenge. Default: true. */
+  detectBotProtection?: boolean;
   /** Extra RequestInit fields (method, redirect, dispatcher, ...). */
   init?: Omit<RequestInit, "headers" | "signal">;
 }
@@ -151,6 +186,7 @@ Every failure throws a `ScrapeError`, which has a `code` and, where available, t
 | `TIMEOUT`              | The request took longer than `timeoutMs`               |
 | `ABORTED`              | The caller's `signal` aborted the request              |
 | `FETCH_FAILED`         | The fetch implementation threw                         |
+| `BOT_PROTECTION`       | The response was a bot protection block or challenge   |
 | `HTTP_ERROR`           | The response status was not 2xx                        |
 | `NOT_HTML`             | The response `content-type` was not HTML               |
 | `NO_MATCH`             | No candidate matched the schema                        |
@@ -165,6 +201,23 @@ try {
   await fetchFirstMatchingJsonScript(url, { schema });
 } catch (error) {
   if (isScrapeError(error, "HTTP_ERROR") && error.status === 404) return null;
+  throw error;
+}
+```
+
+### Bot protection
+
+Before reporting `HTTP_ERROR` (and also on 2xx responses, since some challenge pages return 200), `fetchHtml` checks the response headers and body for known block and challenge pages: Cloudflare, Akamai, DataDome, HUMAN (PerimeterX), Imperva, AWS WAF / CloudFront, Kasada, Sucuri, F5, Vercel, Anubis, Wordfence, and generic captcha pages (`provider: "unknown"`). A match throws a `BotProtectionError`, which has code `BOT_PROTECTION`, the `provider`, and the `reason` (the signal that matched). Pass `detectBotProtection: false` to turn this off, or call `detectBotProtection({ status, headers, body })` yourself to check a response.
+
+```ts
+import { BotProtectionError } from "scrape-ts";
+
+try {
+  await fetchHtml(url);
+} catch (error) {
+  if (error instanceof BotProtectionError) {
+    console.warn(`Blocked by ${error.provider}: ${error.reason}`);
+  }
   throw error;
 }
 ```

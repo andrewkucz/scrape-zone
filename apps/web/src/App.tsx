@@ -250,7 +250,15 @@ export function App() {
                   </>
                 )}
               </span>
-              <NetworkCapture network={network} onCapture={captureNetwork} />
+              <NetworkCapture
+                network={network}
+                onCapture={captureNetwork}
+                disabledReason={
+                  request.method === "GET"
+                    ? undefined
+                    : `Network capture loads the page in a browser, which can only send GET (not ${request.method}) requests`
+                }
+              />
             </div>
           </section>
 

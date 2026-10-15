@@ -184,6 +184,13 @@ function DocIndex({ doc }: { doc: ScrapedDoc }) {
   return doc.kind === "html" ? null : <span className="doc-index">#{doc.index}</span>;
 }
 
+/** Flags network responses that weren't plain JSON (e.g. `text/remix-deferred`). */
+function ContentTypeTag({ doc }: { doc: ScrapedDoc }) {
+  const contentType = doc.request?.contentType;
+  if (!contentType || /[/+]json$/.test(contentType)) return null;
+  return <span className="content-type-tag">{contentType}</span>;
+}
+
 const DocCard = memo(function DocCard({
   doc,
   onOpen,
@@ -213,6 +220,7 @@ const DocCard = memo(function DocCard({
       <div className="card-head">
         <DocIndex doc={doc} />
         <span className="label">{doc.label}</span>
+        <ContentTypeTag doc={doc} />
         <span className="meta">
           {formatBytes(doc.bytes)} · {formatNumber(doc.lines)} lines
         </span>
@@ -245,6 +253,7 @@ function GroupHeader({
     <div className="group-header" {...onActivate(() => onOpen({ doc, line: 0 }))}>
       <DocIndex doc={doc} />
       <span className="label">{doc.label}</span>
+      <ContentTypeTag doc={doc} />
       <span className="meta">
         {formatNumber(count)} {count === 1 ? "match" : "matches"} · {formatBytes(doc.bytes)}
       </span>

@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { compress } from "hono/compress";
-import { isScrapeError, type ScrapeErrorCode } from "scrape-ts";
+import { BotProtectionError, isScrapeError, type ScrapeErrorCode } from "scrape-ts";
 import { z } from "zod";
 import { auth, requireSession, type AuthEnv } from "./auth.ts";
 import { deleteHistoryEntry, listHistory, recordScrape } from "./history.ts";
@@ -27,6 +27,34 @@ function proxyError(error: ProxyNotConfiguredError) {
   return { error: { code: error.code, message: error.message } };
 }
 
+const PROVIDER_NAMES: Record<BotProtectionError["provider"], string> = {
+  cloudflare: "Cloudflare",
+  akamai: "Akamai",
+  datadome: "DataDome",
+  perimeterx: "HUMAN (PerimeterX)",
+  imperva: "Imperva",
+  "aws-waf": "AWS WAF",
+  kasada: "Kasada",
+  sucuri: "Sucuri",
+  f5: "F5",
+  vercel: "Vercel",
+  anubis: "Anubis",
+  wordfence: "Wordfence",
+  unknown: "a captcha",
+};
+
+function botProtectionError(error: BotProtectionError, proxy: boolean) {
+  const statusText = error.status ? ` (HTTP ${error.status})` : "";
+  const hint = proxy ? "" : " Enabling the proxy may help.";
+  return {
+    error: {
+      code: error.code,
+      message: `Request was blocked by ${PROVIDER_NAMES[error.provider]} bot protection${statusText}: ${error.reason}.${hint}`,
+      provider: error.provider,
+    },
+  };
+}
+
 function unknownError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return { error: { code: "UNKNOWN", message } };
@@ -45,6 +73,9 @@ const api = new Hono<AuthEnv>()
       await recordScrape(c.get("session").user.id, url, request);
       return c.json(result, 200);
     } catch (error) {
+      if (error instanceof BotProtectionError) {
+        return c.json(botProtectionError(error, request.proxy), 502);
+      }
       if (isScrapeError(error)) {
         const status = CLIENT_ERRORS.has(error.code) ? 400 : 502;
         return c.json({ error: { code: error.code, message: error.message } }, status);
@@ -62,7 +93,11 @@ const api = new Hono<AuthEnv>()
     } catch (error) {
       if (error instanceof NetworkCaptureError) {
         const status =
-          error.code === "INVALID_URL" ? 400 : error.code === "NAVIGATION_FAILED" ? 502 : 500;
+          error.code === "INVALID_URL" || error.code === "UNSUPPORTED_METHOD"
+            ? 400
+            : error.code === "NAVIGATION_FAILED"
+              ? 502
+              : 500;
         return c.json({ error: { code: error.code, message: error.message } }, status);
       }
       if (error instanceof ProxyNotConfiguredError) return c.json(proxyError(error), 503);

@@ -6,10 +6,12 @@ import { formatNumber } from "../format.ts";
 interface NetworkCaptureProps {
   network: UseQueryResult<NetworkResponse>;
   onCapture: () => void;
+  /** Set when the current request can't be captured; disables the trigger and explains why. */
+  disabledReason?: string;
 }
 
 /** Trigger + status for the on-demand Playwright network capture. */
-export function NetworkCapture({ network, onCapture }: NetworkCaptureProps) {
+export function NetworkCapture({ network, onCapture, disabledReason }: NetworkCaptureProps) {
   const [showScreenshot, setShowScreenshot] = useState(false);
   const elapsed = useElapsedSeconds(network.isFetching);
   const { data, error } = network;
@@ -22,9 +24,11 @@ export function NetworkCapture({ network, onCapture }: NetworkCaptureProps) {
         <span className="network-error">
           <strong>{"code" in error ? String(error.code) : "Error"}</strong> {error.message}
         </span>
+      ) : disabledReason ? (
+        <span className="meta">Network capture is GET-only</span>
       ) : data ? (
         <span className="meta">
-          {formatNumber(data.docs.length)} JSON of {formatNumber(data.totalRequests)} requests ·{" "}
+          {formatNumber(data.docs.length)} data of {formatNumber(data.totalRequests)} requests ·{" "}
           {(data.durationMs / 1000).toFixed(1)}s{!data.reachedIdle && " (never idle)"}
         </span>
       ) : null}
@@ -33,7 +37,13 @@ export function NetworkCapture({ network, onCapture }: NetworkCaptureProps) {
           Screenshot
         </button>
       )}
-      <button type="button" className="small" onClick={onCapture} disabled={network.isFetching}>
+      <button
+        type="button"
+        className="small"
+        onClick={onCapture}
+        disabled={network.isFetching || disabledReason !== undefined}
+        title={disabledReason}
+      >
         {data || error ? "Re-capture network" : "Capture network requests"}
       </button>
       {showScreenshot && data?.screenshot && (

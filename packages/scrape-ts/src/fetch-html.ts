@@ -1,4 +1,5 @@
-import { ScrapeError } from "./errors.ts";
+import { detectBotProtection } from "./bot-protection.ts";
+import { BotProtectionError, ScrapeError } from "./errors.ts";
 
 /**
  * Any function with the shape of the global `fetch`. Custom implementations
@@ -16,6 +17,11 @@ export interface FetchOptions {
   signal?: AbortSignal;
   /** Request timeout in milliseconds, or `false` to disable. Defaults to 15000. */
   timeoutMs?: number | false;
+  /**
+   * Throw a `BotProtectionError` (code `BOT_PROTECTION`) when the response looks
+   * like a bot protection block or challenge page. Defaults to `true`.
+   */
+  detectBotProtection?: boolean;
   /** Additional `RequestInit` options passed through to `fetch`. */
   init?: Omit<RequestInit, "headers" | "signal">;
 }
@@ -61,8 +67,14 @@ export async function fetchHtml(
       signal,
     });
     const finalUrl = response.url || requestedUrl;
+    const detectBlocks = options.detectBotProtection ?? true;
 
     if (!response.ok) {
+      if (detectBlocks) {
+        const body = await response.text().catch(() => "");
+        assertNotBotBlocked(response, body, finalUrl);
+      }
+
       throw new ScrapeError(
         `Page fetch returned HTTP ${response.status} ${response.statusText}`.trim(),
         "HTTP_ERROR",
@@ -79,7 +91,12 @@ export async function fetchHtml(
       );
     }
 
-    return { html: await response.text(), url: finalUrl, response };
+    const html = await response.text();
+    if (detectBlocks) {
+      assertNotBotBlocked(response, html, finalUrl);
+    }
+
+    return { html, url: finalUrl, response };
   } catch (cause) {
     if (cause instanceof ScrapeError) {
       throw cause;
@@ -104,6 +121,22 @@ export async function fetchHtml(
       cause,
       url: requestedUrl,
     });
+  }
+}
+
+function assertNotBotBlocked(response: Response, body: string, url: string): void {
+  const detection = detectBotProtection({
+    status: response.status,
+    headers: response.headers,
+    body,
+  });
+
+  if (detection) {
+    throw new BotProtectionError(
+      `Request to ${url} was blocked by ${detection.provider} bot protection (HTTP ${response.status}): ${detection.reason}`,
+      detection,
+      { url, status: response.status },
+    );
   }
 }
 

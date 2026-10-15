@@ -33,3 +33,17 @@ export function toFetch(request: NetworkRequestInfo): string {
   if (request.postData !== null) init.body = request.postData;
   return `await fetch(${JSON.stringify(request.url)}, ${JSON.stringify(init, null, 2)});`;
 }
+
+/** scrape-ts code that replays the request and decodes its framework-specific body. */
+export function toScrapeTsParse(request: NetworkRequestInfo): string | null {
+  const { parser } = request;
+  if (!parser) return null;
+  // The Remix deferred parser is async; the turbo-stream one is not.
+  const call = parser === "parseTextRemixDeferredBody" ? `await ${parser}` : parser;
+  return [
+    `import { ${parser} } from "scrape-ts";`,
+    "",
+    `const response = ${toFetch(request)}`,
+    `const data = ${call}(await response.text());`,
+  ].join("\n");
+}

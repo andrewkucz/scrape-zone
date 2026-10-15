@@ -467,6 +467,17 @@ button.advanced-toggle.active {
   flex: 1;
 }
 
+.content-type-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--network);
+  white-space: nowrap;
+}
+
 .meta {
   color: var(--muted);
   font-size: 12px;
@@ -654,6 +665,29 @@ button.icon-button:hover:not(:disabled) {
 
 .spacer {
   flex: 1;
+}
+
+.segmented {
+  display: inline-flex;
+}
+
+.dialog-toolbar .segmented button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+
+.segmented button:first-child {
+  border-radius: 6px 0 0 6px;
+  margin-left: 0;
+}
+
+.segmented button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.segmented button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 
 .dialog-code {

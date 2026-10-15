@@ -4,7 +4,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { abridgeUrl, formatBytes, formatNumber, KIND_LABELS } from "../format.ts";
 import { findRanges, foldCase } from "../search/fold.ts";
 import type { NetworkRequestInfo, ScrapedDoc } from "../../server/scrape.ts";
-import { toCurl, toFetch } from "../requestCode.ts";
+import { toCurl, toFetch, toScrapeTsParse } from "../requestCode.ts";
 import { typegenMetaQuery } from "../typegen/client.ts";
 import { Highlight } from "./Highlight.tsx";
 import type { OpenTarget } from "./ResultsList.tsx";
@@ -26,6 +26,8 @@ function whenIdle(fn: () => void): () => void {
 }
 
 type Tab = "contents" | "types";
+/** For decoded framework data responses: show the decoded value or the body as received. */
+type BodyView = "parsed" | "raw";
 
 interface DocDialogProps {
   target: OpenTarget;
@@ -42,8 +44,12 @@ export function DocDialog({ target, query, sourceUrl, onClose }: DocDialogProps)
   // HTML isn't JSON, and neither is a network body that failed to parse.
   const canGenerate = doc.kind !== "html" && (doc.request?.parsed ?? true);
 
+  const rawBody = doc.request?.rawBody ?? null;
+  const [view, setView] = useState<BodyView>("parsed");
+  const shownText = view === "raw" && rawBody !== null ? rawBody : doc.text;
+
   const needle = foldCase(query);
-  const lines = useMemo(() => doc.text.split("\n"), [doc]);
+  const lines = useMemo(() => shownText.split("\n"), [shownText]);
 
   const { matchLines, occurrences } = useMemo(() => {
     const matchLines: number[] = [];
@@ -145,6 +151,10 @@ export function DocDialog({ target, query, sourceUrl, onClose }: DocDialogProps)
               <dt>Type</dt>
               <dd>{request.resourceType}</dd>
             </div>
+            <div>
+              <dt>Content type</dt>
+              <dd>{request.contentType}</dd>
+            </div>
             {request.durationMs !== null && (
               <div>
                 <dt>Time</dt>
@@ -201,6 +211,12 @@ export function DocDialog({ target, query, sourceUrl, onClose }: DocDialogProps)
       {tab === "contents" ? (
         <ContentsView
           doc={doc}
+          text={shownText}
+          view={rawBody !== null ? view : null}
+          onViewChange={(next) => {
+            setView(next);
+            setCurrent(() => 0);
+          }}
           lines={lines}
           query={query}
           needle={needle}
@@ -220,6 +236,11 @@ export function DocDialog({ target, query, sourceUrl, onClose }: DocDialogProps)
 
 interface ContentsViewProps {
   doc: ScrapedDoc;
+  /** The text being displayed: `doc.text`, or the raw body in the raw view. */
+  text: string;
+  /** null when the doc has no raw body to switch to. */
+  view: BodyView | null;
+  onViewChange: (view: BodyView) => void;
   lines: string[];
   query: string;
   needle: string;
@@ -231,6 +252,9 @@ interface ContentsViewProps {
 
 function ContentsView({
   doc,
+  text: shownText,
+  view,
+  onViewChange,
   lines,
   query,
   needle,
@@ -276,6 +300,21 @@ function ContentsView({
       {request && <RequestDetails request={request} />}
 
       <div className="dialog-toolbar">
+        {view && (
+          <div className="segmented" role="group" aria-label="Response view">
+            {(["parsed", "raw"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={view === option}
+                className={view === option ? "active" : undefined}
+                onClick={() => onViewChange(option)}
+              >
+                {option === "parsed" ? "Parsed" : "Raw"}
+              </button>
+            ))}
+          </div>
+        )}
         {query && (
           <>
             <span className="meta">
@@ -304,7 +343,9 @@ function ContentsView({
         <span className="spacer" />
         {request && copyButton("curl", "Copy as cURL", () => toCurl(request))}
         {request && copyButton("fetch", "Copy as fetch", () => toFetch(request))}
-        {copyButton("contents", request ? "Copy response" : "Copy contents", () => doc.text)}
+        {request?.parser &&
+          copyButton("scrape-ts", "Copy as scrape-ts", () => toScrapeTsParse(request)!)}
+        {copyButton("contents", request ? "Copy response" : "Copy contents", () => shownText)}
       </div>
 
       <div ref={scrollRef} className="dialog-code code">
@@ -358,8 +399,16 @@ function RequestDetails({ request }: { request: NetworkRequestInfo }) {
     <div className="request-details">
       {!request.parsed && (
         <p className="warning">
-          Response was labelled JSON but did not parse; showing the raw body.
+          Response was labelled {request.contentType} but did not parse; showing the raw body.
         </p>
+      )}
+      {request.parser && (
+        <details>
+          <summary>
+            Decoded with <code>{request.parser}</code> from scrape-ts
+          </summary>
+          <pre className="code request-body">{toScrapeTsParse(request)}</pre>
+        </details>
       )}
       <details>
         <summary>Request headers ({requestCount})</summary>

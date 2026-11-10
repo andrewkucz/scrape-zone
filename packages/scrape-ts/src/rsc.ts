@@ -2,6 +2,12 @@ import { type Chunk, createFlightResponse, processBinaryChunk } from "@rsc-parse
 import { ScrapeError } from "./errors.ts";
 import { type FetchOptions, fetchHtml } from "./fetch-html.ts";
 import { type HtmlScript, readHtmlScripts } from "./html-scripts.ts";
+import {
+  decodeRscChunks,
+  type ReadableOptions,
+  type ReadableRsc,
+  toReadableRsc,
+} from "./rsc-data.ts";
 import { type StandardSchemaV1, validate } from "./standard-schema.ts";
 
 export type { Chunk as RscChunk };
@@ -15,6 +21,10 @@ export interface ParseNextRscChunksOptions {
   /** Used in error messages. */
   url?: string;
 }
+
+export interface ParseRscDataOptions extends ParseNextRscChunksOptions, ReadableOptions {}
+
+export interface FetchRscDataOptions extends FetchOptions, ReadableOptions {}
 
 export interface FetchFirstMatchingNextRscPropsOptions<
   TSchema extends StandardSchemaV1,
@@ -47,8 +57,8 @@ export async function fetchNextRscChunks(
 }
 
 /**
- * Fetches a Next.js App Router page and returns the props of the first React
- * element in the RSC tree whose props satisfy `schema`.
+ * Fetches a Next.js App Router page and returns the first element props or
+ * JSON-LD block that satisfies `schema` (see {@link parseFirstMatchingNextRscProps}).
  */
 export async function fetchFirstMatchingNextRscProps<TSchema extends StandardSchemaV1>(
   url: string | URL,
@@ -59,61 +69,54 @@ export async function fetchFirstMatchingNextRscProps<TSchema extends StandardSch
   return parseFirstMatchingNextRscProps(page.html, { schema, url: page.url });
 }
 
-/** Parses HTML and returns the first props matching the schema, or throws NO_MATCH. */
+/**
+ * Parses HTML with {@link parseRscData} and returns the first value matching the
+ * schema, or throws NO_MATCH. Checks named client component props, then JSON-LD
+ * blocks, then host element / anonymous client component props (`other`).
+ */
 export async function parseFirstMatchingNextRscProps<TSchema extends StandardSchemaV1>(
   html: string,
   options: ParseFirstMatchingNextRscPropsOptions<TSchema>,
 ): Promise<StandardSchemaV1.InferOutput<TSchema>> {
-  const chunks = parseNextRscChunks(html, options);
-  const props = await findFirstMatchingNextRscProps(chunks, options.schema);
+  const { schema, ...parseOptions } = options;
+  const data = parseRscData(html, parseOptions);
+  const candidates = [
+    ...Object.values(data.components).map((component) => component.props),
+    ...data.jsonLd.flatMap((block) => (Array.isArray(block) ? [block, ...block] : [block])),
+    ...data.other.map((element) => element.props),
+  ];
 
-  if (props === undefined) {
-    throw new ScrapeError(
-      `No React Server Component props matched the provided schema for ${options.url ?? "the provided HTML"}`,
-      "NO_MATCH",
-      { url: options.url },
-    );
-  }
-
-  return props.value;
-}
-
-/**
- * Fetches a Next.js App Router page and returns the props of every React
- * element in the RSC tree, unvalidated, in breadth-first order per model chunk.
- */
-export async function fetchAllNextRscProps(
-  url: string | URL,
-  options: FetchOptions = {},
-): Promise<unknown[]> {
-  const page = await fetchHtml(url, options);
-  return parseAllNextRscProps(page.html, { url: page.url });
-}
-
-/** Parses HTML and returns all element props, unvalidated, in breadth-first order per chunk. */
-export function parseAllNextRscProps(
-  html: string,
-  options: ParseNextRscChunksOptions = {},
-): unknown[] {
-  return collectAllNextRscProps(parseNextRscChunks(html, options));
-}
-
-/**
- * Searches the model chunks breadth-first for a React element whose `props`
- * satisfy `schema`. Returns `undefined` when nothing matches.
- */
-export async function findFirstMatchingNextRscProps<TSchema extends StandardSchemaV1>(
-  chunks: Pick<NextRscChunks, "model">,
-  schema: TSchema,
-): Promise<{ value: StandardSchemaV1.InferOutput<TSchema> } | undefined> {
-  for (const props of walkNextRscProps(chunks)) {
-    const result = await validate(schema, props);
+  for (const candidate of candidates) {
+    const result = await validate(schema, candidate);
     if (result.success) {
-      return { value: result.value };
+      return result.value;
     }
   }
 
-  return undefined;
+  throw new ScrapeError(
+    `No React Server Component props matched the provided schema for ${options.url ?? "the provided HTML"}`,
+    "NO_MATCH",
+    { url: options.url },
+  );
+}
+
+/**
+ * Fetches a Next.js App Router page and returns a readable view of its RSC
+ * payload: client component props, route trees, head metadata, JSON-LD and assets.
+ */
+export async function fetchRscData(
+  url: string | URL,
+  options: FetchRscDataOptions = {},
+): Promise<ReadableRsc> {
+  const { dropProps, maxTreeStringLength, ...fetchOptions } = options;
+  const page = await fetchHtml(url, fetchOptions);
+  return parseRscData(page.html, { url: page.url, dropProps, maxTreeStringLength });
+}
+
+/** Parses Next.js page HTML straight into the readable RSC view. */
+export function parseRscData(html: string, options: ParseRscDataOptions = {}): ReadableRsc {
+  const { url, ...readableOptions } = options;
+  return toReadableRsc(decodeRscChunks(parseNextRscChunks(html, { url })), readableOptions);
 }
 
 /**

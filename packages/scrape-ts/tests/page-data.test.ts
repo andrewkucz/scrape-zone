@@ -3,9 +3,10 @@ import { z } from "zod";
 import {
   fetchAllPageData,
   parseAllJsonScripts,
-  parseAllNextRscProps,
+  collectAllNextRscProps,
   parseAllPageData,
   parseFirstMatchingNextRscProps,
+  parseNextRscChunks,
 } from "../src/index.ts";
 import { htmlResponse, mockFetch, nextFlightHtml } from "./helpers.ts";
 
@@ -33,7 +34,7 @@ test("combines all payloads and preserves remaining HTML exactly", () => {
   const result = parseAllPageData(html);
   expect(result.jsonScripts).toEqual([{ count: 1 }, { name: "line one\nline two" }]);
   expect(result.jsonScripts).toEqual(parseAllJsonScripts(html));
-  expect(result.nextRscProps).toEqual(parseAllNextRscProps(html));
+  expect(result.nextRscProps).toEqual(collectAllNextRscProps(parseNextRscChunks(html)));
   expect(result.nextRscProps).toHaveLength(2);
   expect(result.html).toBe(before + retained + after);
 });
@@ -98,12 +99,14 @@ test("fetches the combined data in a single request", async () => {
 });
 
 test("parses the first matching RSC props directly from HTML", async () => {
+  const clientPayload =
+    '1:I["9",[],"Item"]\n0:["$","div",null,{"children":["$","$L1",null,{"id":7}]}]\n';
   const schema = z.object({ id: z.number() }).transform(({ id }) => String(id));
-  await expect(parseFirstMatchingNextRscProps(nextFlightHtml(payload), { schema })).resolves.toBe(
-    "7",
-  );
   await expect(
-    parseFirstMatchingNextRscProps(nextFlightHtml(payload), {
+    parseFirstMatchingNextRscProps(nextFlightHtml(clientPayload), { schema }),
+  ).resolves.toBe("7");
+  await expect(
+    parseFirstMatchingNextRscProps(nextFlightHtml(clientPayload), {
       schema: z.object({ missing: z.string() }),
       url: "https://example.com",
     }),

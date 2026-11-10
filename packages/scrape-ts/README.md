@@ -35,7 +35,8 @@ Malformed or empty JSON scripts, unrelated scripts, and Flight bootstrap-only sc
 - `fetch…` takes a URL and makes a request; `parse…` takes existing HTML, except `parseJsonValue`, which takes a JSON string.
 - `All…` returns every payload without schema validation; `FirstMatching…` requires a schema and returns the first validated output.
 - `…NextRscChunks` returns all decoded Flight chunks grouped by type.
-- `collectAllNextRscProps(chunks)` and `findFirstMatchingNextRscProps(chunks, schema)` operate on already decoded chunks. The latter returns `{ value }` or `undefined`; HTML and URL schema helpers throw `NO_MATCH` when nothing matches.
+- `…RscData` returns a readable view of the RSC payload (client component props, routes, head, JSON-LD, assets).
+- `collectAllNextRscProps(chunks)` operates on already decoded chunks. HTML and URL schema helpers throw `NO_MATCH` when nothing matches.
 
 ## JSON / JSON-LD script tags
 
@@ -74,15 +75,22 @@ const { initialData } = await fetchFirstMatchingNextRscProps("https://example.co
 });
 ```
 
-This decodes the page's Flight payload and does a breadth-first walk of every model chunk. It returns the props of the first React element whose `props` pass validation.
+This decodes the page's Flight payload with `parseRscData` and checks, in order: the props of every named client component, every JSON-LD block rendered in the RSC tree, then the props of host elements (such as `<div>`) and anonymous client components. Each group is in render order. It returns the first value that passes validation.
 
-To get the props of every React element in the tree without validating any of them, use `fetchAllNextRscProps`:
+To get a readable view of the whole payload without validating anything, use `fetchRscData`:
 
 ```ts
-import { fetchAllNextRscProps } from "scrape-ts";
+import { fetchRscData } from "scrape-ts";
 
-const allProps = await fetchAllNextRscProps("https://example.com"); // unknown[]
+const data = await fetchRscData("https://example.com/store/acme");
+data.components.StorePage?.props; // client component props, keyed `Name`, `Name[1]`, ...
+data.jsonLd; // parsed <script type="application/ld+json"> blocks
+data.other; // [{ type: "div", route, props }, ...] host elements and anonymous client components
+data.routes; // simplified render tree per route segment
+data.head; // { title, meta, links }
 ```
+
+The result also includes `url`, dynamic route `params`, `detached` (element trees outside the route tree) and preloaded `assets`. Pass `dropProps` (default `["className", "style"]`) to drop host element props from the trees and `other`; elements left with no props are not listed in `other`. Pass `maxTreeStringLength` (default `200`) to truncate long strings in the render trees; `components` and `other` props are never truncated. The lower-level `decodeRscChunks(chunks)` and `toReadableRsc(decoded)` steps are exported too.
 
 To get the raw decoded chunks, grouped by chunk type (`model`, `text`, `hint`, `module`, ...), use `fetchNextRscChunks`:
 
@@ -136,7 +144,7 @@ Each fetching helper has a pure counterpart that takes an HTML string and makes 
 | `fetchAllJsonScripts`            | `parseAllJsonScripts(html)`                        |
 | `fetchNextRscChunks`             | `parseNextRscChunks(html)`                         |
 | `fetchFirstMatchingNextRscProps` | `parseFirstMatchingNextRscProps(html, { schema })` |
-| `fetchAllNextRscProps`           | `parseAllNextRscProps(html)`                       |
+| `fetchRscData`                   | `parseRscData(html)`                               |
 | `fetchAllPageData`               | `parseAllPageData(html)`                           |
 | `fetchHtml`                      | n/a                                                |
 
@@ -222,6 +230,12 @@ try {
 }
 ```
 
+## Migration from 1.1
+
+- `fetchAllNextRscProps` / `parseAllNextRscProps` are replaced by `fetchRscData` / `parseRscData`, which return a readable `ReadableRsc` view instead of a flat array of props. `collectAllNextRscProps(chunks)` is unchanged.
+- `fetchFirstMatchingNextRscProps` / `parseFirstMatchingNextRscProps` now search the output of `parseRscData`: named client component props, then JSON-LD blocks, then host element and anonymous client component props. Host element props in `dropProps` (`className`, `style` by default) are no longer matched.
+- `findFirstMatchingNextRscProps` has been removed; use `parseFirstMatchingNextRscProps`.
+
 ## Migration from 0.2
 
 These are breaking export renames; the previous names are no longer exported. Update imports and calls using this table:
@@ -244,7 +258,7 @@ These are breaking export renames; the previous names are no longer exported. Up
 | `ExtractNextRscPropsOptions`   | `FetchFirstMatchingNextRscPropsOptions` |
 | `ParseNextRscDataOptions`      | `ParseNextRscChunksOptions`             |
 
-`fetchHtml`, `isScrapeError`, the error class, and other types/constants keep their names. The new `parseAllNextRscProps` and `parseFirstMatchingNextRscProps` helpers accept HTML directly. Standalone RSC parsers still throw `RSC_NOT_FOUND` when no Flight payload exists; the combined page helper allows pages without RSC data.
+`fetchHtml`, `isScrapeError`, the error class, and other types/constants keep their names. The new `parseAllNextRscProps` (now `parseRscData`) and `parseFirstMatchingNextRscProps` helpers accept HTML directly. Standalone RSC parsers still throw `RSC_NOT_FOUND` when no Flight payload exists; the combined page helper allows pages without RSC data.
 
 ## Development
 

@@ -22,22 +22,32 @@ export type {
   ParseFirstMatchingJsonScriptOptions,
 } from "./json-script.ts";
 export {
-  fetchAllNextRscProps,
+  fetchRscData,
   fetchNextRscChunks,
   fetchFirstMatchingNextRscProps,
   collectAllNextRscProps,
-  findFirstMatchingNextRscProps,
   parseNextRscChunks,
-  parseAllNextRscProps,
+  parseRscData,
   parseFirstMatchingNextRscProps,
 } from "./rsc.ts";
 export type {
   FetchFirstMatchingNextRscPropsOptions,
+  FetchRscDataOptions,
   NextRscChunks,
+  ParseRscDataOptions,
   ParseNextRscChunksOptions,
   ParseFirstMatchingNextRscPropsOptions,
   RscChunk,
 } from "./rsc.ts";
+export { decodeRscChunks, toReadableRsc } from "./rsc-data.ts";
+export type {
+  DecodedElement,
+  DecodedRsc,
+  ReadableComponent,
+  ReadableElement,
+  ReadableOptions,
+  ReadableRsc,
+} from "./rsc-data.ts";
 export { parseTextRemixDeferredBody, TEXT_REMIX_DEFERRED_CONTENT_TYPE } from "./remix-deferred.ts";
 export { parseTextXScriptTurboStreamBody, TEXT_X_SCRIPT_CONTENT_TYPE } from "./turbo-stream.ts";
 export type { StandardSchemaV1 } from "./standard-schema.ts";
